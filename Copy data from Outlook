@@ -1,0 +1,980 @@
+Sub TaskTKTConsolidation()
+'This will combine the relevant data from the task and TKT tabs
+
+'turn off calculations to make faster
+Application.Calculation = xlCalculationManual
+
+
+'complete task import
+Call GMTKiller("Task", 1)
+Sheets("BAU Data").Activate
+Application.Calculate
+For c = 1 To WorksheetFunction.CountA(Range("1:1"))
+    If Cells(1, c).Interior.ColorIndex = 6 Then
+        TargetHeader = Cells(1, c).Value
+        Range("Tasks[" & TargetHeader & "]").Copy
+        Cells(4, c).PasteSpecial xlPasteValues
+    End If
+Next c
+
+'complete the TKT Import
+Call GMTKiller("TKT", 1)
+Sheets("BAU Data").Activate
+Application.Calculate
+TKTEntryRow = WorksheetFunction.CountA(Sheets("BAU Data").Range("A:A")) + 2
+For c = 1 To WorksheetFunction.CountA(Range("1:1"))
+    If Cells(1, c).Interior.ColorIndex = 6 Then
+        TargetHeader = Cells(1, c).Value
+        Range("TKTs[" & TargetHeader & "]").Copy
+        Cells(TKTEntryRow, c).PasteSpecial xlPasteValues
+    End If
+Next c
+
+Call TableBugBypass
+
+
+Application.Calculation = xlCalculationAutomatic
+
+
+End Sub
+Private Sub EntityFormat(SheetName As String) 'wip needs redo
+    Dim TableName As String
+    Dim hosts As String
+    Dim hcount As Integer
+    
+    
+    Sheets(SheetName).Activate
+    TableName = Cells(1, 1).ListObject.Name
+    
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    Dim WRKNT() As String
+    
+    WorkNotesPosition = WorksheetFunction.Match("Work notes/Additional Comments", Range(TableName & "[#Headers]"), 0)
+    
+    If WorksheetFunction.CountIf(Range(TableName & "[#Headers]"), "Adjusted Hosts") > 0 Then
+        AdjHostsPosition = WorksheetFunction.Match("Adjusted Hosts", Range(TableName & "[#Headers]"), 0)
+    Else
+        AdjHostsPosition = WorksheetFunction.CountA(Range(TableName & "[#Headers]")) + 1
+        With Cells(1, AdjHostsPosition)
+            .Value = "Adjusted Hosts"
+            .Interior.Color = RGB(255, 192, 0)
+        End With
+    End If
+    
+    For r = 2 To WorksheetFunction.CountA(Range("A:A"))
+        hcount = 1
+        If InStr(Sheets(SheetName).Cells(r, WorkNotesPosition).Value, "hosts-items") > 0 Then
+            WRKNT = Split(Cells(r, WorkNotesPosition).Value, Chr(10))
+            For anum = 0 To UBound(WRKNT)
+                If InStr(WRKNT(anum), "hosts-items") > 0 Then
+                    For hnum = anum To UBound(WRKNT)
+                        If Len(WRKNT(hnum)) > 1 Then
+                            hosts = hosts & WRKNT(hnum) & Chr(10)
+                            hcount = hcount + 1
+                        End If
+                        If InStr(WRKNT(hnum), "####") > 0 Then
+                            hnum = 30000
+                            anum = 30000
+                        End If
+                    Next hnum
+                    Cells(r, AdjHostsPosition).Value = Left(hosts, Len(hosts) - 1)
+                    hosts = ""
+                End If
+            Next anum
+            ReDim WRKNT(40000)
+        End If
+        Cells(r, 2).Value = WorksheetFunction.Max(hcount - 3, 1)
+    Next r
+    
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+
+
+End Sub
+Sub Button2_Click()
+
+booleanentrycell = 33
+
+    If Sheets("BAU Data").Cells(2, booleanentrycell).Value = "Hosts are from raw notes" Then
+        Sheets("BAU Data").Cells(2, booleanentrycell).Value = "Hosts are from adj. notes"
+    Else
+        Sheets("BAU Data").Cells(2, booleanentrycell).Value = "Hosts are from raw notes"
+    End If
+    
+    
+End Sub
+Sub TableBugBypass()
+    Dim col As Integer
+    
+    'find the first non formula column, and set it to A incase the template is blank
+    
+    col = 1
+    Do While Cells(2, col).HasFormula
+        col = col + 2
+    Loop
+    
+    Cells(2, col).Value = "A"
+    
+    Cells(1, Range(ActiveSheet.ListObjects(1)).Columns.Count + 1).Select
+    
+    ActiveSheet.ListObjects(1).Resize Range(Cells(1, 1), Cells(Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row, Range(ActiveSheet.ListObjects(1)).Columns.Count))
+    Cells(1, 1).Select
+    
+    Rows("2:3").Delete
+    
+End Sub
+
+Sub EffortComparison()
+'This takes
+Dim fDay, fMonth, HEPath As String
+Dim FCheckAns As VbMsgBoxResult
+    
+    fMonth = Right("0" & Month(WorksheetFunction.Max(Range("Unification[Date]"))), 2)
+    fDay = Right("0" & Day(WorksheetFunction.Max(Range("Unification[Date]"))), 2)
+    
+
+    FCheckAns = MsgBox("Is the " & fMonth & "." & fDay & "." & "Effort Comparison.xlsb named correctly and open?" & Chr(10) & _
+        "Yes: Yes it is open and name matches above." & Chr(10) & _
+        "No: It's not open, but it's correctly named and in the same folder as the Hybrid Effort. Please Open for me!" & Chr(10) & _
+        "Cancel: End Macro", vbYesNoCancel, "File Location Direction")
+
+    If FCheckAns = vbCancel Then
+        Exit Sub
+    ElseIf FCheckAns = vbNo Then
+        HEPath = Application.ActiveWorkbook.Path
+        Workbooks.Open Filename:=HEPath & "\" & fMonth & "." & fDay & "." & "Effort Comparison.xlsb"
+        Windows(fMonth & "." & fDay & "." & "Hybrid Effort.xlsb").Activate
+    End If
+
+    'prep the effort comparison sheet
+    Windows(fMonth & "." & fDay & "." & "Effort Comparison.xlsb").Activate
+    
+    Sheets("Unification").Activate
+    Range("Unification[#Headers]").Select
+    Selection.AutoFilter
+    
+    Sheets("Unification").Cells(2, 1).Value = "A"
+'    Sheets("True Effort Data").Cells(2, 1).Value = "B"
+    
+'    Sheets("True Effort Data").Activate
+'    Range("TWEntries[#Headers]").Select
+'    Selection.AutoFilter
+    
+'   Application.Goto Reference:="TWEntries"
+'    Selection.Delete
+    Sheets("Unification").Visible = True
+'    Sheets("True Effort Data").Visible = True
+    Application.Goto Reference:="Unification"
+    Selection.Delete
+    Cells(2, 11).Formula = "=IF([@[Effort Type]]=""TCM/CHG"",AND([@[Matched True Effort]]>16,ISNUMBER([@[Matched True Effort]])),AND([@[Matched True Effort]]>6,ISNUMBER([@[Matched True Effort]])))"
+    
+    'copy the TW data
+'    Sheets("True Effort (Too High)").Activate
+'    Windows(fMonth & "." & fDay & "." & "Hybrid Effort.xlsb").Activate
+'    Range("TWEntries").Copy
+    
+'    Windows(fMonth & "." & fDay & "." & "Effort Comparison.xlsb").Activate
+'    Sheets("True Effort Data").Cells(4, 1).PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+'        :=False, Transpose:=False
+    
+    'Copy the unified data
+    Windows(fMonth & "." & fDay & "." & "Hybrid Effort.xlsb").Activate
+    Range("Unification").Copy
+    
+    Windows(fMonth & "." & fDay & "." & "Effort Comparison.xlsb").Activate
+    Sheets("Unification").Cells(4, 1).PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=False
+        
+    'Complete table bug bypass method
+ '   Sheets("True Effort Data").Activate
+ '   Cells(1, WorksheetFunction.CountA(Range("TWEntries[#Headers]")) + 5).Select
+ '   ActiveSheet.ListObjects("TWEntries").Resize Range(Cells(1, 1), Cells(WorksheetFunction.CountA(Range("A:A")) + 1, WorksheetFunction.CountA(Range("1:1"))))
+ '   Rows("2:3").Delete
+ '   Cells(1, 1).Select
+    
+    Sheets("Unification").Activate
+    Cells(1, WorksheetFunction.CountA(Range("Unification[#Headers]")) + 5).Select
+    ActiveSheet.ListObjects("Unification").Resize Range(Cells(1, 1), Cells(WorksheetFunction.CountA(Range("A:A")) + 2, WorksheetFunction.CountA(Range("1:1"))))
+    Rows("2:3").Delete
+    Cells(1, 1).Select
+        
+    'Add total variance formula
+    Range("Unification[Total Variance]").Formula = "=IF(LEFT([@[Matched True Effort]],2)=""No"",-[@[Bundled Effort W/CHG Admin & Hotline]],[@[Matched True Effort]]-[@[Bundled Effort W/CHG Admin & Hotline]])"
+
+    'refresh the data and select the previous day
+    ActiveWorkbook.RefreshAll
+    
+    Sheets("True Effort (Too High)").Select
+    ActiveSheet.PivotTables("PivotTable1").PivotFields("Date").ClearAllFilters
+    ActiveSheet.PivotTables("PivotTable1").PivotFields("Date").CurrentPage = Format(WorksheetFunction.Max(Range("Unification[Date]")), "d-mmm")
+    
+    Sheets("True Effort (Too Low)").Select
+    ActiveSheet.PivotTables("LowTasks").PivotFields("Date").ClearAllFilters
+    ActiveSheet.PivotTables("LowTasks").PivotFields("Date").CurrentPage = Format(WorksheetFunction.Max(Range("Unification[Date]")), "d-mmm")
+
+End Sub
+Sub Unification()
+
+    Sheets("Unification").Activate
+    
+    Cells(2, 1).Value = "a"
+    
+    Application.Calculation = xlManual
+    
+    Range("Unification").Delete
+
+    
+    'TCM
+    
+        EntryRow = WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 3
+        
+        'Ticket Number
+        Range("TCM[Request ID]").Copy
+        Sheets("Unification").Cells(EntryRow, 1).PasteSpecial Paste:=xlPasteValues
+        
+        'TWT
+        Range("TCM[Work Sub Type]").Copy
+        Sheets("Unification").Cells(EntryRow, 2).PasteSpecial Paste:=xlPasteValues
+        
+        'Total Bundled Effort
+        Range("TCM[Total Bundled Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 3).PasteSpecial Paste:=xlPasteValues
+        
+        'Matched True Effort
+        Range("TCM[True Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 4).PasteSpecial Paste:=xlPasteValues
+        
+        'Team
+        Range("TCM[Team]").Copy
+        Sheets("Unification").Cells(EntryRow, 5).PasteSpecial Paste:=xlPasteValues
+    
+        'SA - DNE
+        
+        'Date
+        Range("TCM[Actual Start Time]").Copy
+        Sheets("Unification").Cells(EntryRow, 7).PasteSpecial Paste:=xlPasteValues
+        
+        Range(Cells(EntryRow, 8), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 8)) = "TCM/CHG"
+    
+    'Voltaire
+    
+        EntryRow = WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 3
+        
+        'Ticket Number
+        Range("Voltaire[Number]").Copy
+        Sheets("Unification").Cells(EntryRow, 1).PasteSpecial Paste:=xlPasteValues
+        
+        'TWT
+        Range("Voltaire[Time Worked Type]").Copy
+        Sheets("Unification").Cells(EntryRow, 2).PasteSpecial Paste:=xlPasteValues
+        
+        'Total Bundled Effort
+        Range("Voltaire[Total Bundled Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 3).PasteSpecial Paste:=xlPasteValues
+        
+        'Matched True Effort
+        Range("Voltaire[True Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 4).PasteSpecial Paste:=xlPasteValues
+        
+        'Team
+        Range("Voltaire[Team]").Copy
+        Sheets("Unification").Cells(EntryRow, 5).PasteSpecial Paste:=xlPasteValues
+    
+        'SA
+        Range("Voltaire[Closed By]").Copy
+        Sheets("Unification").Cells(EntryRow, 6).PasteSpecial Paste:=xlPasteValues
+        
+        'Date
+        Range("Voltaire[Closed]").Copy
+        Sheets("Unification").Cells(EntryRow, 7).PasteSpecial Paste:=xlPasteValues
+        
+        'Effort Type
+        Range(Cells(EntryRow, 8), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 8)) = "Voltaire"
+        
+    'Documentation
+    
+        EntryRow = WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 3
+        
+        'Ticket Number
+        Range("Documentation[Number]").Copy
+        Sheets("Unification").Cells(EntryRow, 1).PasteSpecial Paste:=xlPasteValues
+        
+        'TWT
+        Range("Documentation[Time Worked Type]").Copy
+        Sheets("Unification").Cells(EntryRow, 2).PasteSpecial Paste:=xlPasteValues
+        
+        'Total Bundled Effort
+        Range("Documentation[Total Bundled Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 3).PasteSpecial Paste:=xlPasteValues
+        
+        'Matched True Effort
+        Range("Documentation[True Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 4).PasteSpecial Paste:=xlPasteValues
+        
+        'Team
+        Range("Documentation[Team]").Copy
+        Sheets("Unification").Cells(EntryRow, 5).PasteSpecial Paste:=xlPasteValues
+    
+        'SA - SNE
+        
+        'Date
+        Range("Documentation[Closed]").Copy
+        Sheets("Unification").Cells(EntryRow, 7).PasteSpecial Paste:=xlPasteValues
+        
+        'Effort Type
+        Range(Cells(EntryRow, 8), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 8)) = "Documentation"
+        
+    'Attempt Time
+    
+        EntryRow = WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 3
+        
+        'Ticket Number
+        Range("Attempt[Number]").Copy
+        Sheets("Unification").Cells(EntryRow, 1).PasteSpecial Paste:=xlPasteValues
+        
+        'TWT
+        Range("Attempt[Effort Type]").Copy
+        Sheets("Unification").Cells(EntryRow, 2).PasteSpecial Paste:=xlPasteValues
+        
+        'Total Bundled Effort
+        Range("Attempt[Total Bundled Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 3).PasteSpecial Paste:=xlPasteValues
+        
+        'Matched True Effort
+        Range("Attempt[True Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 4).PasteSpecial Paste:=xlPasteValues
+        
+        'Team
+        Range("Attempt[Team]").Copy
+        Sheets("Unification").Cells(EntryRow, 5).PasteSpecial Paste:=xlPasteValues
+    
+        'SA - DNE
+
+        
+        'Date
+        Range("Attempt[Closed]").Copy
+        Sheets("Unification").Cells(EntryRow, 7).PasteSpecial Paste:=xlPasteValues
+        
+        'Effort Type
+        Range(Cells(EntryRow, 8), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 8)) = "Attempt"
+        
+    'RFB and CHK
+    
+        EntryRow = WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 3
+        
+        'Ticket Number
+        Range("RFBCHK[Number]").Copy
+        Sheets("Unification").Cells(EntryRow, 1).PasteSpecial Paste:=xlPasteValues
+        
+        'TWT
+        Range("RFBCHK[Time Worked Type]").Copy
+        Sheets("Unification").Cells(EntryRow, 2).PasteSpecial Paste:=xlPasteValues
+        
+        'Total Bundled Effort
+        Range("RFBCHK[Total Bundled Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 3).PasteSpecial Paste:=xlPasteValues
+        
+        'Matched True Effort
+        Range("RFBCHK[True Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 4).PasteSpecial Paste:=xlPasteValues
+        
+        'Team
+        Range("RFBCHK[Team]").Copy
+        Sheets("Unification").Cells(EntryRow, 5).PasteSpecial Paste:=xlPasteValues
+    
+        'SA - DNE
+        Range("RFBCHK[Closed Name]").Copy
+        Sheets("Unification").Cells(EntryRow, 6).PasteSpecial Paste:=xlPasteValues
+        
+        'Date
+        Range("RFBCHK[Closed Date]").Copy
+        Sheets("Unification").Cells(EntryRow, 7).PasteSpecial Paste:=xlPasteValues
+        
+        'Effort Type
+        Range(Cells(EntryRow, 8), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 8)) = "RFB&CHK"
+        
+        
+    'BAU
+    
+        EntryRow = WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 3
+        
+        'Ticket Number
+        Range("BAU[Number]").Copy
+        Sheets("Unification").Cells(EntryRow, 1).PasteSpecial Paste:=xlPasteValues
+        
+        'TWT
+        Range("BAU[Time Worked Type]").Copy
+        Sheets("Unification").Cells(EntryRow, 2).PasteSpecial Paste:=xlPasteValues
+        
+        'Total Bundled Effort
+        Range("BAU[Total Bundled Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 3).PasteSpecial Paste:=xlPasteValues
+        
+        'Matched True Effort
+        Range("BAU[True Effort]").Copy
+        Sheets("Unification").Cells(EntryRow, 4).PasteSpecial Paste:=xlPasteValues
+        
+        'Team
+        Range("BAU[Team]").Copy
+        Sheets("Unification").Cells(EntryRow, 5).PasteSpecial Paste:=xlPasteValues
+    
+        'SA - DNE
+        Range("BAU[Closed Name]").Copy
+        Sheets("Unification").Cells(EntryRow, 6).PasteSpecial Paste:=xlPasteValues
+        
+        'Date
+        Range("BAU[Closed Date]").Copy
+        Sheets("Unification").Cells(EntryRow, 7).PasteSpecial Paste:=xlPasteValues
+        
+        'Effort Type
+        Range(Cells(EntryRow, 8), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 8)) = "BAU"
+        
+        'Roster
+        Range("BAU[Cost Center]").Copy
+        Sheets("Unification").Cells(EntryRow, 9).PasteSpecial Paste:=xlPasteValues
+
+        Sheets("Unification").Activate
+
+        'delete L3 and and Non-NTT Cost center
+    Cells(1, 15).Formula = "=IFERROR(IFERROR(MATCH(""L3"",$E:$E,0),MATCH(""None"",I:I,0)),""Done"")"
+    Cells(1, 15).Calculate
+    
+    Do While Cells(1, 15).Value <> "Done"
+        Cells(Cells(1, 15).Value, 1).Select
+        Rows(Cells(1, 15).Value).Delete
+        Cells(1, 15).Calculate
+    Loop
+    
+    Cells(1, 15).Clear
+    'Resize the table
+
+
+    ActiveSheet.ListObjects("Unification").Resize Range(Cells(1, 1), Cells(WorksheetFunction.CountA(Sheets("Unification").Range("A:A")) + 2, 9))
+    
+    Rows("2:3").Delete
+    Columns(9).Delete
+    Cells(1, 9).Value = "Total Variance"
+    Cells(2, 9).Formula = "=IFERROR([@[Matched True Effort]]-[@[Total Bundled Effort]],0)"
+    
+    
+    Cells(1, 10).Value = "TW Entry Error"
+    Cells(2, 10).Formula = "=ISERROR([@[Matched True Effort]]-[@[Total Bundled Effort]])"
+    
+    Application.Calculation = xlAutomatic
+    
+    Cells(1, 1).Select
+
+End Sub
+Sub CreateWorkBook(WBFileName As String, TargetTable As String, MasterWB As String, MasterPath As String)
+    Dim CurrentWB As String
+    Dim PivotTable As PivotTable
+    Dim PTCache As PivotCache
+    Dim PTRange As Range
+    
+    Set NewWorkbook = Workbooks.Add
+
+    CurrentWB = ActiveWorkbook.Name
+    
+    Windows(MasterWB).Activate
+    Range(TargetTable & "[#All]").Copy
+    Windows(CurrentWB).Activate
+    Sheets("Sheet1").Name = "Data"
+    Sheets("Data").Cells(1, 1).PasteSpecial Paste:=xlPasteValues
+    ActiveSheet.ListObjects.Add(xlSrcRange, Selection, xlYes).Name = TargetTable
+
+    Sheets("Sheet2").Name = "Summary"
+    
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        TargetTable & "[#All]", Version:=xlPivotTableVersion14).CreatePivotTable _
+        TableDestination:="Summary!R2C2", TableName:="Effort", DefaultVersion _
+        :=xlPivotTableVersion14
+    
+    Set PivotTable = Worksheets("Summary").PivotTables("Effort")
+    
+        With PivotTable
+            With .PivotFields("Team")
+                .Orientation = xlRowField
+                .Position = 1
+            End With
+            With .PivotFields("Total Bundled Effort")
+                .Orientation = xlDataField
+                .Position = 1
+                .Caption = "Bundled Effort"
+                .Function = xlSum
+                .NumberFormat = "#,##0.0"
+            End With
+            With .PivotFields("True Effort")
+                .Orientation = xlDataField
+                .Position = 2
+                .Caption = "Matched True Effort"
+                .Function = xlSum
+                .NumberFormat = "#,##0.0"
+            End With
+        End With
+    
+    Sheets("Summary").Activate
+    Sheets("Sheet3").Delete
+    
+    If TargetTable = "BAU" Then
+        Call BAUFix
+    End If
+    
+    With NewWorkbook
+        .SaveAs FileFormat:=xlExcel12, Filename:=WBFileName & ".xlsb"
+        .Close
+    End With
+    
+End Sub
+Sub EffortSeperation()
+    Application.DisplayAlerts = False
+    Dim HEPath, HEWB, FileDate As String
+    
+    HEWB = ActiveWorkbook.Name
+    HEPath = Application.ActiveWorkbook.Path & "\"
+    
+    FileDate = Format(WorksheetFunction.Max(Range("Unification[Date]")), "MM") & "." & Format(WorksheetFunction.Max(Range("Unification[Date]")), "DD") & "."
+    
+    If MsgBox("File will be saved to the following Path:" & Chr(10) & HEPath, vbOKCancel) = vbCancel Then
+        Exit Sub
+    End If
+    
+    Call CreateWorkBook(HEPath & FileDate & "TCM.CHG", "TCM", HEWB & "", WEPath & "")
+    Call CreateWorkBook(HEPath & FileDate & "Voltaire", "Voltaire", HEWB & "", WEPath & "")
+    Call CreateWorkBook(HEPath & FileDate & "Documentation", "Documentation", HEWB & "", WEPath & "")
+    Call CreateWorkBook(HEPath & FileDate & "Attempt Time", "Attempt", HEWB & "", WEPath & "")
+    Call CreateWorkBook(HEPath & FileDate & "BAU", "BAU", HEWB & "", WEPath & "")
+    Call CreateWorkBook(HEPath & FileDate & "RFB", "RFBCHK", HEWB & "", WEPath & "")
+    
+End Sub
+Sub BAUFix()
+    Dim r As Integer
+
+    Sheets("Data").Select
+    Cells(1, WorksheetFunction.CountA(Range("1:1")) + 2).Select
+    
+    r = 3
+    Do While IsEmpty(Cells(r, 1).Value) = False
+        If Cells(r, 6).Value = "None" Then
+            Rows(r).Delete
+        Else
+            r = r + 1
+        End If
+    Loop
+
+    ActiveWorkbook.RefreshAll
+End Sub
+Sub TKTandTaskEntityFormat()
+    Call EntityFormat("TKT")
+    Call EntityFormat("Task")
+End Sub
+Sub GMTKiller(sht As String, HeaderRow As Integer)
+    'This macro will remove GMT from any column containing created or closed
+    
+    Dim col As Integer
+    
+    If sht = "" Or HeaderRow = 0 Then
+        For Each Sheet In ActiveWorkbook.Sheets
+            If MsgBox("Is this your sheet?" & Chr(10) & Sheet.Name, vbYesNo) = vbYes Then
+                sht = Sheet.Name
+                Exit For
+            End If
+        Next
+        Sheets(sht).Activate
+        Cells(1, 1).Select
+        Do While HeaderRow = 0 Or IsNumeric(HeaderRow) = False
+            HeaderRow = InputBox("Please enter the number of the row which contains the header")
+        Loop
+    End If
+    
+    Sheets(sht).Activate
+    
+    For col = 1 To WorksheetFunction.CountA(Rows(HeaderRow))
+        If InStr(LCase(Cells(HeaderRow, col).Value), "closed") > 0 _
+            Or InStr(LCase(Cells(HeaderRow, col).Value), "created") > 0 _
+            Or InStr(LCase(Cells(HeaderRow, col).Value), "date") > 0 _
+            Or InStr(LCase(Cells(HeaderRow, col).Value), "start") > 0 _
+            Or InStr(LCase(Cells(HeaderRow, col).Value), "open") > 0 Then
+            Columns(col).Replace What:=" GMT", Replacement:="", LookAt:=xlPart, _
+                SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+                ReplaceFormat:=False
+        End If
+    Next col
+    
+End Sub
+Sub UpdateReport()
+    Dim appLogins As Variant
+    Dim LoginMatch As Boolean
+    
+    appLogins = Range("EICPMOMetrics[LoginID]")
+    LoginMatch = False
+    
+    'Test to see if the person updating belongs to EIC-PMO-Metrics as of 10/20/2016 before completing the report
+    For i = 1 To UBound(appLogins)
+        If appLogins(i, 1) = Environ("Username") Then
+            LoginMatch = True
+            Call DownloadAttachments
+        End If
+    Next i
+    
+    If LoginMatch = False Then MsgBox ("Must be member of EIC PMO Metrics; UserID " & Environ("Username") & " Not Found")
+End Sub
+Private Sub DownloadAttachments()
+    'Downloads the most recent attachments, as indicated in the reports table
+    Dim oOlAp As Object, oOlns As Object, OutLookInbox As Object
+    Dim oOlItm As Object, OLAtt As Object
+
+    Dim NewFileName, FolderName As String
+    Dim TargetDate As Date
+    Dim exportDL, TargetExportDL, EmailsFound As Integer
+    Dim Reports As Variant
+    
+    'determine the reports to be downloaded
+    Reports = Range("Reports[Email Subject Line]")
+    
+    'the target date is the date the email was sent on
+    TargetDate = Now() - 1
+    
+    'specifiy the folder to save the attachments to
+    AttachmentPath = Application.ActiveWorkbook.Path
+    NewFileName = AttachmentPath & "\" & Format(TargetDate, "MM.DD.YYYY") & " Exports\" 'Create a path for the exports
+    
+    'create the folder for the exports
+    On Error Resume Next
+    MkDir (NewFileName)
+    On Error GoTo 0
+
+    'create outlook object
+    Set oOlAp = GetObject(, "Outlook.application")
+    Set oOlns = oOlAp.GetNamespace("MAPI")
+    
+    'have the user pick a folder where the exports are located
+    If MsgBox("Select the folder that contains the exports", vbOKCancel) = vbCancel Then Exit Sub
+    Set OutLookInbox = oOlns.PickFolder
+    
+    'return focus to excel
+    AppActivate Application.Caption
+    
+    'sort emails newest to oldest
+    Set EmailItem = OutLookInbox.Items
+    EmailItem.Sort "[ReceivedTime]", True
+    
+    'Loop through all the emails in the specified folder and download any attachments that match the subject
+    EmailsFound = 0
+    LoopCheck = 200
+    
+    For EmailNum = 1 To EmailItem.Count
+        'check to see if the right folder was selected
+        If EmailNum = LoopCheck Then
+            If MsgBox(OutLookInbox.Items.Count - EmailNum & " Searched so far." & Chr(10) & "Continue Searching?", vbYesNo) = vbNo Then
+                MsgBox ("Rerun report when ready.")
+                Exit Sub
+            Else
+               LoopCheck = LoopCheck + 200
+            End If
+        End If
+        'Loop through all the possible reports to see if the subject matches one in the list
+        For i = 1 To UBound(Reports)
+            If EmailItem(EmailNum).Subject = Reports(i, 1) Then
+                For Each OLAtt In EmailItem(EmailNum).Attachments
+                    OLAtt.SaveAsFile (NewFileName & OLAtt.Filename)
+                    Workbooks.Open (NewFileName & OLAtt.Filename)
+                    ThisWorkbook.Activate
+                Next
+                Reports(i, 1) = "REPORT FOUND"
+                i = UBound(Reports)
+                EmailsFound = EmailsFound + 1
+                If EmailsFound = UBound(Reports) Then EmailNum = EmailItem.Count
+            End If
+        Next i
+    Next
+    
+    'check to ensure all reports were found
+    If EmailsFound = UBound(Reports) Then
+        Call CompileReport
+    Else
+        MsgBox ("Not all reports found. Exiting")
+    End If
+    
+Exit Sub
+PathError: _
+    MsgBox ("Unable to create folder." & Chr(10) & Chr(10) & "Delete folder if it already exists.")
+End Sub
+Private Sub CompileReport()
+    'This will add the exports downloaded and opened from the download attachments sub
+    Dim wbk As Workbook
+    Dim CRange, PRange As Range
+    Dim RepShtNm, RepNm As Variant
+    Dim col, i As Integer
+    Dim row As Double
+    
+    'turn off calculations to speed up formatting
+    Application.Calculation = xlManual
+    
+    'Prepare all sheets by deleting the old data. Only formats the table if it is in cell (1,1) and has more than 1 line of data
+    For Each sht In ThisWorkbook.Sheets
+        If sht.Cells(1, 1).Value <> "" And Range(sht.ListObjects(1)).Rows.Count > 1 Then
+            sht.Visible = True
+            sht.Select
+            sht.ListObjects(1).Resize Range(Cells(1, 1), Cells(2, Range(sht.ListObjects(1)).Columns.Count))
+            Rows("3:" & sht.UsedRange.Rows.Count).Delete
+        End If
+    Next
+    
+    'Remove the duplicates on DOC and Attempt
+    For Each wbk In Workbooks
+        If InStr(wbk.Name, "Documentation Effort - Tags") > 0 Or InStr(wbk.Name, "Attempt Time - Tags") > 0 Then
+            wbk.Activate
+            wbk.ActiveSheet.UsedRange.RemoveDuplicates Columns:=1, header:=xlYes
+            ThisWorkbook.Activate
+        End If
+    Next
+    
+    'Update the roster report
+    Call RosterUpdate
+    
+    'COmbine the TCM reports, and remove duplicates on: CHG Number, Assign to RMC, Work Type, Work Sub Type, Host NUmber, host other
+    'Select the CI report, determine the first available row and use it as the paste range
+
+    Workbooks("TCM - CI - Recorded Effort.csv").Activate
+    Set PRange = Range("A" & ActiveSheet.UsedRange.Rows.Count + 1)
+    
+    'select the Non CI Report, and set the data to copy
+    Workbooks("TCM - NonCI - Recorded Effort.csv").Activate
+    Set CRange = Range("A2:P" & WorksheetFunction.CountA(Range("A:A")))
+    
+    'Transfer the data
+    CRange.Copy Destination:=PRange
+    
+    'close the non ci workbook
+    Workbooks("TCM - NonCI - Recorded Effort.csv").Close
+    
+    'remove the duplicates
+    Workbooks("TCM - CI - Recorded Effort.csv").Activate
+    ActiveSheet.UsedRange.RemoveDuplicates Columns:=Array(1, 3, 5, 6, 10, 11), header:=xlYes
+    
+    ThisWorkbook.Activate
+    
+    'Load all the sheet names into an array
+    RepShtNm = Range("Reports[Sheet Name]")
+    RepNm = Range("Reports[SN Report Name]")
+    
+    'Add each export to its assosciated sheet
+    For Each wbk In Workbooks
+        For i = 1 To UBound(RepNm)
+            If InStr(wbk.Name, RepNm(i, 1)) > 0 And wbk.Sheets(1).UsedRange.Rows.Count > 1 Then
+                'open the assosciated sheet, and determine the entry column
+                Sheets(RepShtNm(i, 1)).Select
+                col = 1
+                Do While Cells(2, col).HasFormula
+                    col = col + 1
+                Loop
+                
+                'determine the entry row
+                If Sheets(RepShtNm(i, 1)).Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row > 10 Then
+                    row = Sheets(RepShtNm(i, 1)).Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row + 1
+                Else
+                    row = 4
+                End If
+                
+                'set the paste range
+                Set PRange = Cells(row, col)
+                
+                'open the assosciated export
+                wbk.Activate
+                Sheets(1).Select
+                
+                'remove GMTs
+                For col = 1 To WorksheetFunction.CountA(Range("1:1"))
+                    If InStr(LCase(Cells(1, col).Value), "closed") > 0 _
+                        Or InStr(LCase(Cells(1, col).Value), "created") > 0 _
+                        Or InStr(LCase(Cells(1, col).Value), "date") > 0 _
+                        Or InStr(LCase(Cells(1, col).Value), "start") > 0 _
+                        Or InStr(LCase(Cells(1, col).Value), "open") > 0 Then
+                        Columns(col).Replace What:=" GMT", Replacement:="", LookAt:=xlPart, _
+                            SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+                            ReplaceFormat:=False
+                    End If
+                Next col
+                
+                'determine the copy range
+                Set CRange = ActiveSheet.UsedRange.Offset(1).Resize(ActiveSheet.UsedRange.Rows.Count - 1, ActiveSheet.UsedRange.Columns.Count)
+                
+                'Transfer the data
+                ThisWorkbook.Activate
+                CRange.Copy
+                PRange.PasteSpecial (xlPasteValues)
+                
+                'close the work book; disable dialogue box
+                Application.DisplayAlerts = False
+                wbk.Close
+                Application.DisplayAlerts = True
+                i = UBound(RepNm)
+            End If
+        Next i
+    Next
+    
+    'resize the tables to include the new data
+    For Each sht In ThisWorkbook.Sheets
+        sht.Activate
+         If Cells(1, 1).Value <> "" Then Call TableBugBypass
+    Next
+    
+    'combine the task and tkt data
+    Call TaskTKTConsolidation
+    
+    'Check the roster for potentially missing IDs
+    Call RosterValidation
+    
+    Application.Calculation = xlCalculationAutomatic
+    
+    'create the unified sheet
+    Call Unification
+    
+End Sub
+Sub RosterUpdate()
+    Workbooks("NTT SAs.csv").Activate
+    
+    Dim FNameCol, LNameCol, TargetCol, UNameCol, CityCol, EntryRow As Integer
+    Dim FullNames As Range
+    
+    'Add formulas for the Full Name and the NTT Data Roster Value
+    
+    'disable alerts
+    Application.DisplayAlerts = False
+    
+    'find the name and the entry columns
+    FNameCol = Cells.Find(What:="first_name", After:=[A1], SearchDirection:=xlPrevious).Column
+    LNameCol = Cells.Find(What:="last_name", After:=[A1], SearchDirection:=xlPrevious).Column
+    UNameCol = Cells.Find(What:="user_name", After:=[A1], SearchDirection:=xlPrevious).Column
+    CityCol = Cells.Find(What:="city", After:=[A1], SearchDirection:=xlPrevious).Column
+    TargetCol = Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).Column + 1
+    
+    'Define the range of the names
+    Set FullNames = Range(Cells(2, TargetCol), Cells(Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row, TargetCol))
+    
+    'Add the full name formula
+    FullNames.FormulaR1C1 = "=RC[" & FNameCol - TargetCol & "]&"" ""&RC[" & LNameCol - TargetCol & "]"
+    
+    'convert the names to values
+    FullNames.Copy
+    FullNames.PasteSpecial (xlPasteValues)
+    
+    'Use the Full Names range to populate the Stream, Entry, and Exit column
+    FullNames.Offset(0, 1).Value = "NTT Data"
+    FullNames.Offset(0, 2).Value = Now
+    FullNames.Offset(0, 3).Value = DateValue("12/31/2099")
+    
+    'Add the New IDs to the roster sheet, remove duplicates giving preferance to the old
+    ThisWorkbook.Sheets("Roster").Activate
+    Sheets("Roster").ListObjects(1).Resize Range(Cells(1, 2), Cells(2, Range(Sheets("Roster").ListObjects(1)).Columns.Count + 1))
+    'determine the entry row
+    EntryRow = Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row + 1
+    
+    'add the new data
+    'logins
+    Workbooks("NTT SAs.csv").Activate
+    FullNames.Offset(0, UNameCol - TargetCol).Copy
+    ThisWorkbook.Activate
+    Range("b" & EntryRow).PasteSpecial xlPasteValues
+    
+    'Full Names
+    Workbooks("NTT SAs.csv").Activate
+    FullNames.Copy
+    ThisWorkbook.Activate
+    Range("c" & EntryRow).PasteSpecial xlPasteValues
+    
+    'City
+    Workbooks("NTT SAs.csv").Activate
+    FullNames.Offset(0, CityCol - TargetCol).Copy
+    ThisWorkbook.Activate
+    Range("d" & EntryRow).PasteSpecial xlPasteValues
+    
+    'Stream
+    Workbooks("NTT SAs.csv").Activate
+    FullNames.Offset(0, 1).Copy
+    ThisWorkbook.Activate
+    Range("e" & EntryRow).PasteSpecial xlPasteValues
+    
+    'Entry Date
+    Workbooks("NTT SAs.csv").Activate
+    FullNames.Offset(0, 2).Copy
+    ThisWorkbook.Activate
+    Range("f" & EntryRow).PasteSpecial xlPasteValues
+    
+    'Exit Date
+    Workbooks("NTT SAs.csv").Activate
+    FullNames.Offset(0, 3).Copy
+    ThisWorkbook.Activate
+    Range("g" & EntryRow).PasteSpecial xlPasteValues
+    
+    'remove the duplicates
+    Range(Cells(3, 2), Cells(Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row, 7)).RemoveDuplicates Columns:=1, header:=xlNo
+    
+    Workbooks("NTT SAs.csv").Close
+    
+    'Resize the table
+    
+    Cells(1, Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).Column + 2).Select
+    Sheets("Roster").ListObjects(1).Resize Range(Cells(1, 2), _
+        Cells(Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row, _
+        Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).Column))
+    
+    'enable alerts
+    Application.DisplayAlerts = True
+    
+End Sub
+Sub auto_open()
+    Dim appLogins As Variant
+    Dim LoginMatch As Boolean
+    
+    appLogins = Range("EICPMOMetrics[LoginID]")
+    LoginMatch = False
+    
+    'Test to see if the person updating belongs to EIC-PMO-Metrics as of 10/20/2016 before completing the report
+    For i = 1 To UBound(appLogins)
+        If appLogins(i, 1) = Environ("Username") Then
+            LoginMatch = True
+        End If
+    Next i
+    
+    If LoginMatch Then
+        Sheets("Unification").Shapes.Range(Array("UpdateHybridEff")).Visible = msoTrue
+        Sheets("Unification").Shapes.Range(Array("UpdateEffCom")).Visible = msoTrue
+        Sheets("Unification").Shapes.Range(Array("EffSep")).Visible = msoTrue
+    Else
+        Sheets("Unification").Shapes.Range(Array("UpdateHybridEff")).Visible = msoFalse
+        Sheets("Unification").Shapes.Range(Array("UpdateEffCom")).Visible = msoFalse
+        Sheets("Unification").Shapes.Range(Array("EffSep")).Visible = msoFalse
+    End If
+End Sub
+Sub RosterValidation()
+    'This will test for userIDs
+    'Disable calcualtions
+    Application.Calculation = xlManual
+    RVal.Show
+    Application.Calculation = xlAutomatic
+End Sub
+Sub AddNames(names() As String)
+
+    Sheets("Roster").Activate
+    For i = 2 To UBound(names)
+        EntryRow = Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row + 1
+        For row = 2 To Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row + 1
+            If Cells(row, 2).Value = names(i) Then
+                EntryRow = row
+                row = Cells.Find(What:="*", After:=[A1], SearchDirection:=xlPrevious).row + 1
+            End If
+        Next row
+        Cells(EntryRow, 2).Select
+        Cells(EntryRow, 2).Value = names(i)
+        Cells(EntryRow, 3).Value = WorksheetFunction.Index(Range("BAU[Closed Name]"), WorksheetFunction.Match(names(i), Range("BAU[Closed ID]"), 0))
+        Cells(EntryRow, 4).Value = InputBox("Enter the city for " & names(i) & " below")
+        Cells(EntryRow, 5).Value = "NTT Data"
+        Cells(EntryRow, 6).Value = Now
+        Cells(EntryRow, 7).Value = DateValue("12/31/2099")
+    Next i
+    
+End Sub
+
