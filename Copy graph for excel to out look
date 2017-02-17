@@ -1,0 +1,15 @@
+Sub CopyAndPasteToMailBody()
+    Set mailApp = CreateObject("Outlook.Application")
+    Set mail = mailApp.CreateItem(olMailItem)
+    mail.Display
+    Set wEditor = mailApp.ActiveInspector.wordEditor
+    ActiveWorkbook.Worksheets("Pivot").ChartObjects("Chart 1").CopyPicture
+    wEditor.Application.Selection.Paste
+    
+    Set wEditor = mailApp.ActiveInspector.wordEditor
+    ActiveWorkbook.Worksheets("Pivot").ChartObjects("Chart 2").CopyPicture
+    
+    wEditor.Application.Selection.Paste
+
+
+End Sub
