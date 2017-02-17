@@ -1,0 +1,50 @@
+Sub AttachMail()
+    Set mailApp = CreateObject("Outlook.Application")
+    Set mail = mailApp.CreateItem(olMailItem)
+        
+    MsgBox "Allow macro to access the e-mail address from outlook", , "QT Report"
+        
+    mail.Display
+    
+    mail.To = Sheets("Master").Range("I18")
+    mail.CC = Sheets("Master").Range("I19")
+    mail.Subject = Sheets("Master").Range("I20")
+    mail.Attachments.Add ActiveWorkbook.FullName
+    
+    Set wEditor = mailApp.ActiveInspector.WordEditor
+    
+    'copies the greatings
+    Sheets("Master").Activate
+    
+    ActiveSheet.Range("H23:H25").Copy
+    wEditor.Application.Selection.Paste
+    
+    wEditor.Application.Selection.TypeParagraph
+
+    
+    'copies the graphs
+    Sheets("Pivot").Activate
+    ActiveSheet.Shapes.Range(Array("Chart 1", "Straight Connector 5")).Select
+
+   ' ActiveChart.ChartArea.Copy
+   Selection.Copy
+   wEditor.Application.Selection.PasteSpecial DataType:=4
+    wEditor.Application.Selection.TypeParagraph
+    wEditor.Application.Selection.TypeParagraph
+
+    
+    ActiveSheet.Shapes.Range("Chart 3").Select
+    Selection.Copy
+  wEditor.Application.Selection.PasteSpecial DataType:=4
+    
+     wEditor.Application.Selection.TypeParagraph
+     wEditor.Application.Selection.TypeParagraph
+    
+    ActiveSheet.Shapes.Range("Chart 8").Select
+     Selection.Copy
+     wEditor.Application.Selection.PasteSpecial DataType:=4
+    
+      wEditor.Application.Selection.TypeParagraph
+      wEditor.Application.Selection.TypeParagraph
+    
+End Sub
